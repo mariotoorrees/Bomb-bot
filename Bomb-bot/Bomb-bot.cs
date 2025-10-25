@@ -43,13 +43,13 @@ namespace cAlgo.Robots
                 double? miniHolderStop = null;
                 double? approachingTPStop = null;
 
-                // --- First breakout stop (MODIFIED) ---
+                // --- First breakout stop (middle of previous candle) ---
                 if (position.Comment == "FirstCandleMoved")
                 {
                     if (position.TradeType == TradeType.Buy && current.High > previous.High)
-                        breakoutStop = (previousCandle.High + previousCandle.Low) / 2; // middle of previous candle
+                        breakoutStop = (previousCandle.High + previousCandle.Low) / 2;
                     else if (position.TradeType == TradeType.Sell && current.Low < previous.Low)
-                        breakoutStop = (previousCandle.High + previousCandle.Low) / 2; // middle of previous candle
+                        breakoutStop = (previousCandle.High + previousCandle.Low) / 2;
                 }
 
                 // --- Mini-holder stop ---
@@ -79,13 +79,13 @@ namespace cAlgo.Robots
                     {
                         double distanceToTP = position.TakeProfit.Value - Symbol.Bid;
                         if (distanceToTP <= candleLength)
-                            approachingTPStop = previousCandle.Low; // previous candle low
+                            approachingTPStop = previousCandle.Low;
                     }
                     else if (position.TradeType == TradeType.Sell)
                     {
                         double distanceToTP = Symbol.Ask - position.TakeProfit.Value;
                         if (distanceToTP <= candleLength)
-                            approachingTPStop = previousCandle.High; // previous candle high
+                            approachingTPStop = previousCandle.High;
                     }
                 }
 
@@ -98,11 +98,35 @@ namespace cAlgo.Robots
                     bool isSwingLow = bars[i].Low < bars[i - 1].Low && bars[i].Low < bars[i - 2].Low &&
                                       bars[i].Low < bars[i + 1].Low && bars[i].Low < bars[i + 2].Low;
 
+                    // --- Existing structure stop ---
                     if (position.TradeType == TradeType.Buy && isSwingHigh && current.High > bars[i].High)
                         structureStop = current.Low;
 
                     if (position.TradeType == TradeType.Sell && isSwingLow && current.Low < bars[i].Low)
                         structureStop = current.High;
+
+                    // --- New wick-based exit ---
+                    double candleLength = current.High - current.Low;
+
+                    if (position.TradeType == TradeType.Buy && isSwingHigh && current.High > bars[i].High)
+                    {
+                        double topWick = current.High - Math.Max(current.Close, current.Open);
+                        if (topWick / candleLength >= 0.4) // ≥ 2/5 wick
+                        {
+                            ClosePosition(position);
+                            break; // exit loop after closing
+                        }
+                    }
+
+                    if (position.TradeType == TradeType.Sell && isSwingLow && current.Low < bars[i].Low)
+                    {
+                        double bottomWick = Math.Min(current.Close, current.Open) - current.Low;
+                        if (bottomWick / candleLength >= 0.4) // ≥ 2/5 wick
+                        {
+                            ClosePosition(position);
+                            break; // exit loop after closing
+                        }
+                    }
                 }
 
                 // --- Determine the tightest stop-loss ---
@@ -119,7 +143,6 @@ namespace cAlgo.Robots
                     if (approachingTPStop.HasValue && approachingTPStop.Value > tightestStop)
                         tightestStop = approachingTPStop.Value;
 
-                    // ✅ Only apply if stop is below current Bid
                     if (tightestStop < Symbol.Bid)
                         ModifyPosition(position, tightestStop, position.TakeProfit);
                 }
@@ -134,7 +157,6 @@ namespace cAlgo.Robots
                     if (approachingTPStop.HasValue && approachingTPStop.Value < tightestStop)
                         tightestStop = approachingTPStop.Value;
 
-                    // ✅ Only apply if stop is above current Ask
                     if (tightestStop > Symbol.Ask)
                         ModifyPosition(position, tightestStop, position.TakeProfit);
                 }
