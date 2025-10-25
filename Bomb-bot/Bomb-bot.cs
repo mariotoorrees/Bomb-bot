@@ -34,6 +34,7 @@ namespace cAlgo.Robots
                 var index = bars.Count - 1;
                 var current = bars[index];
                 var previous = bars[index - 1];
+                var previousCandle = bars[bars.Count - 2]; // candle before current
 
                 // --- Calculate all potential stop-losses ---
                 double? initialStop = position.TradeType == TradeType.Buy ? previous.Low : previous.High;
@@ -42,13 +43,13 @@ namespace cAlgo.Robots
                 double? miniHolderStop = null;
                 double? approachingTPStop = null;
 
-                // --- Breakout stop (first candle after entry) ---
+                // --- First breakout stop (MODIFIED) ---
                 if (position.Comment == "FirstCandleMoved")
                 {
                     if (position.TradeType == TradeType.Buy && current.High > previous.High)
-                        breakoutStop = current.Low;
+                        breakoutStop = (previousCandle.High + previousCandle.Low) / 2; // middle of previous candle
                     else if (position.TradeType == TradeType.Sell && current.Low < previous.Low)
-                        breakoutStop = current.High;
+                        breakoutStop = (previousCandle.High + previousCandle.Low) / 2; // middle of previous candle
                 }
 
                 // --- Mini-holder stop ---
@@ -73,17 +74,18 @@ namespace cAlgo.Robots
                 if (position.TakeProfit.HasValue)
                 {
                     double candleLength = current.High - current.Low;
+
                     if (position.TradeType == TradeType.Buy)
                     {
                         double distanceToTP = position.TakeProfit.Value - Symbol.Bid;
                         if (distanceToTP <= candleLength)
-                            approachingTPStop = current.Low;
+                            approachingTPStop = previousCandle.Low; // previous candle low
                     }
                     else if (position.TradeType == TradeType.Sell)
                     {
                         double distanceToTP = Symbol.Ask - position.TakeProfit.Value;
                         if (distanceToTP <= candleLength)
-                            approachingTPStop = current.High;
+                            approachingTPStop = previousCandle.High; // previous candle high
                     }
                 }
 
